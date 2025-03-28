@@ -1,2 +1,2 @@
-# k8-on-kvm_k8-helm
-Helm packages for K8-on-kvm
+# k8-on-kvm
+Script for creating a K8 cluser on type 2 hypervisor
