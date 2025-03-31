@@ -29,13 +29,6 @@ def main_function():
     Ansible_K8_Config()
     Cleanup()
 
-#Script to:
-#    
-#    Create storageClss
-#    Create NFS mount
-#    Create Cloudflare tunnel
-#    Install apps from ddelisle repo
-
 #---------------------- START ANSIBLE-K8-CONFIG -----------------------
 
 def Ansible_K8_Config():

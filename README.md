@@ -9,17 +9,20 @@ This automated process requires the following information prior to execution:
 2) A network bridge is configured on the host and LibVirt environment named: br0
 
 3) Your network has static IP Addresses available:
-192.168.1.200 - Will be used for master-001
-192.168.1.201 - Will be used for worker-001
-192.168.1.202 - Will be used for worker-002
+   - 192.168.1.200 - Will be used for master-001
+   - 192.168.1.201 - Will be used for worker-001
+   - 192.168.1.202 - Will be used for worker-002
 
-4) The following software is installed on the host:
- - Terraform
+5) The following software is installed on the host:
+ 
+ -  Terraform
+ 
  - Ansible and "ansible-playbook" located at: ~/.local/bin/ansible-playbook
+ 
  - Ansible Modules:
-...community.kubernetes
-...ansible.posix
-...community.general
+....community.kubernetes
+....ansible.posix
+....community.general
  
 5) Baseline *.qcow2 disk image is named, located, and has read permissions at location: /mnt/usb_drive/kvm/disk/ol9-kvm-baseline.qcow2
 
