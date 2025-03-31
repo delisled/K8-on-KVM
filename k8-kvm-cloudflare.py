@@ -103,18 +103,18 @@ replicaCount: 1"""
     tunnel_manifest.close()
     print("Finished creating the manifest\n----------------------------------------------------------")
 
-#    # Establish Cloudflare tunnel
-#    def cf_k8_tunnel():
-#        print("Executing deployment of Cloudflare Tunnel")
-#        command = ["helm", "upgrade", "--install", "cloudflare", "cloudflare/cloudflare-tunnel", "--namespace", "cloudflare", "--values", "tunnel-manifest.yaml", "--wait"]
-#        process = subprocess.run(command, capture_output=True, text=True)
-#        if process.returncode == 0:
-#            print("Execution of deployment of Cloudflare Tunnel successfully\n----------------------------------------------------------")
-#            return True
-#        else:
-#            print(f"There was an error with deployment of Cloudflare Tunnel...")
-#            print(process.stderr + "----------------------------------------------------------")
-#    cf_k8_tunnel()
+    # Establish Cloudflare tunnel
+    def cf_k8_tunnel():
+        print("Executing deployment of Cloudflare Tunnel")
+        command = ["helm", "upgrade", "--install", "cloudflare", "cloudflare/cloudflare-tunnel", "--namespace", "cloudflare", "--values", "tunnel-manifest.yaml", "--wait"]
+        process = subprocess.run(command, capture_output=True, text=True)
+        if process.returncode == 0:
+            print("Execution of deployment of Cloudflare Tunnel successfully\n----------------------------------------------------------")
+            return True
+        else:
+            print(f"There was an error with deployment of Cloudflare Tunnel...")
+            print(process.stderr + "----------------------------------------------------------")
+    cf_k8_tunnel()
 
     # Check deployment status
     def k8_deploy_chk():
