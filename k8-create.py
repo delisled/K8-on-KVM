@@ -9,7 +9,7 @@
 # Cleanup:              Removes only the files and directories created by this script
 #
 #######################################
-print("\nVersion: 1.0.0\n")
+print("\nVersion: 1.0.1\n")
 
 import os
 import subprocess
@@ -20,6 +20,17 @@ import shutil       # used for deleting dir's
 
 HOME_DIR = os.path.expanduser("~/")
 
+print("-----------------------------------------------------------------")
+def countdown(t):
+    while t:
+        mins, secs = divmod(t, 60)
+        timer = '{:02d}'.format(secs)
+        print("Starting script in: " + timer, end="\r")
+        time.sleep(1)
+        t -= 1
+countdown(5)
+print("-----------------------------------------------------------------")
+
 # Execute script in order of functions defined here
 #--------------------------------------------------
 def main_function():
@@ -27,15 +38,16 @@ def main_function():
     Ansible_Prep()
     Ansible_Baseline()
     Ansible_K8_Config()
+    Ansible_K8_Join()
     Cleanup()
 
-#---------------------- START ANSIBLE-K8-CONFIG -----------------------
+#----------------------- START ANSIBLE-K8-JOIN ------------------------
 
-def Ansible_K8_Config():
-    print("Writing Ansible K8 init and config playbook")
+def Ansible_K8_Join():
+    print("Writing Ansible Join Worker Node playbook")
 
-k8_playbook = open(HOME_DIR + "k8_playbook.yaml", "w")
-    k8_playbook.write('''- hosts: master-001 worker-001 worker-002
+    join_playbook = open(HOME_DIR + "join_playbook.yaml", "w")
+    join_playbook.write('''- hosts: master-001 worker-001 worker-002
   become: true
   vars_files:
     - ./variables.yaml
@@ -43,27 +55,9 @@ k8_playbook = open(HOME_DIR + "k8_playbook.yaml", "w")
 
 #---------------------------------> K8 CLUSTER INIT AND BASIC CONFIG
 
-  - name: Initialize K8 Cluster
-    shell: kubeadm init --apiserver-advertise-address 192.168.1.200 --control-plane-endpoint 192.168.1.200 --pod-network-cidr=10.244.0.0/16
-    delegate_to: master-001
-
-  - name: Add export to root profile
-    lineinfile:
-      dest: /root/.bashrc
-      line: export KUBECONFIG=/etc/kubernetes/admin.conf
-    delegate_to: master-001
-
-  - name: Source the root profile
-    shell: source ~/.bashrc
-    delegate_to: master-001
-
-  - name: Install flannel pod network
-    shell: kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
-    delegate_to: master-001
-
-  - name: Install NFS CSI
-    shell: curl -skSL https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/v4.11.0/deploy/install-driver.sh | bash -s v4.11.0 --
-    delegate_to: master-001
+  - name: Wait 1 minute before joining worker nodes
+    ansible.builtin.pause:
+      minutes: 1
 
   - name: Get kubeadm join command
     command: kubeadm token create --print-join-command
@@ -74,25 +68,92 @@ k8_playbook = open(HOME_DIR + "k8_playbook.yaml", "w")
     command: "{{ join_command.stdout }}" 
     delegate_to: "{{ item }}"
     loop: "{{ groups['worker'] }}"
+''')
+    join_playbook.close()
+    print("Finished writing Ansible Join Worker Node playbook\n-----------------------------------------------------------------")
 
-  - name: Pause for 1 minute for worker nodes to join successfully
-    ansible.builtin.pause:
-      minutes: 1
+    def run_ansible_playbook(playbook_path, inventory_path):
+        print("Applying K8 Join Worker Nodes playbook after authentication...")
+        command = ["ansible-playbook", "--user", "root", "--ask-pass", playbook_path]
+        if inventory_path:
+            command.extend(["-i", inventory_path])
+        try:
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout, stderr = process.communicate()
+            return stdout.decode(), stderr.decode()
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            return None
+    if __name__ == '__main__':
+        playbook_path = HOME_DIR + "join_playbook.yaml"
+        inventory_path = HOME_DIR + "inventory.ini"
+        output, error = run_ansible_playbook(playbook_path, inventory_path)
+        if output:
+            print("Standard Output:")
+            print(output)
+        if error:
+            print("Standard Error:")
+            print(error)
 
-  - name: Label the node
-    command: kubectl label node worker-001 node-role.kubernetes.io/worker=worker
-    delegate_to: master-001
+#------------------------ END ANSIBLE-K8-JOIN -------------------------
 
-  - name: Label the node
-    command: kubectl label node worker-002 node-role.kubernetes.io/worker=worker
-    delegate_to: master-001
+#---------------------- START ANSIBLE-K8-CONFIG -----------------------
+
+def Ansible_K8_Config():
+    print("Writing Ansible K8 INIT and Configuration playbook")
+
+    k8_playbook = open(HOME_DIR + "k8_playbook.yaml", "w")
+    k8_playbook.write('''- hosts: master-001
+  become: true
+  vars_files:
+    - ./variables.yaml
+  tasks:
+
+#---------------------------------> K8 CLUSTER INIT AND BASIC CONFIG
+
+  - name: Initialize K8 Cluster
+    shell: kubeadm init --apiserver-advertise-address 192.168.1.200 --control-plane-endpoint 192.168.1.200 --pod-network-cidr=10.244.0.0/16
+
+  - name: Add export to root profile
+    lineinfile:
+      dest: /root/.bashrc
+      line: export KUBECONFIG=/etc/kubernetes/admin.conf
+
+  - name: Source the root profile
+    shell: source ~/.bashrc
+
+  - name: Install flannel pod network
+    shell: kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+
+  - name: Install NFS CSI
+    shell: curl -skSL https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/v4.11.0/deploy/install-driver.sh | bash -s v4.11.0 --
+
+  - name: Deploy StorageClass on master node
+    community.kubernetes.k8s:
+      state: present
+      resource_definition:
+        apiVersion: storage.k8s.io/v1
+        kind: StorageClass
+        metadata:
+          name: nfs-csi
+          annotations:
+            storageclass.kubernetes.io/is-default-class: "true"
+        provisioner: nfs.csi.k8s.io
+        parameters:
+          server: 192.168.1.99
+          share: /mnt/usb_drive
+        reclaimPolicy: Delete
+        volumeBindingMode: Immediate
+        mountOptions:
+          - nfsvers=4
 ''')
     k8_playbook.close()
-    print("Finished writing Ansible K8 init and config playbook")
+    print("Finished writing Ansible K8 INIT and Configuration playbook\n-----------------------------------------------------------------")
     
-    print("Waiting for VM's to reboot before creating a new inventory file")
+    print("\nWaiting for VM's to reboot...\n")
     time.sleep(90)
 
+    print("-----------------------------------------------------------------")
     print("Creating new inventory file")
     # Remove the previous inventory file and re-write using new IP addresses
     p1 = pathlib.Path(HOME_DIR + "inventory.ini")
@@ -125,10 +186,10 @@ k8_playbook = open(HOME_DIR + "k8_playbook.yaml", "w")
         else:
             print(f"Command failed with error code {virsh_cmd.returncode}: {virsh_cmd.stderr}")
     ansible_inv.close()
-    print("Completed writing new inventory file")
+    print("Completed writing new inventory file\n-----------------------------------------------------------------")
 
     def run_ansible_playbook(playbook_path, inventory_path):
-        print("Applying K8 init and configurations...")
+        print("Applying K8 INIT and Configurations playbook after authentication...")
         command = ["ansible-playbook", "--user", "root", "--ask-pass", playbook_path]
 
         if inventory_path:
@@ -159,7 +220,7 @@ k8_playbook = open(HOME_DIR + "k8_playbook.yaml", "w")
 #----------------------- START ANSIBLE-BASELINE -----------------------
 
 def Ansible_Baseline():
-    print("Writing Ansible 'baseline' software install and configuration playbook")
+    print("Writing Ansible BASELINE playbook")
     baseline_playbook = open(HOME_DIR + "baseline_playbook.yaml", "w")
     baseline_playbook.write('''- hosts: master-001 worker-001 worker-002
   become: true
@@ -197,6 +258,28 @@ def Ansible_Baseline():
         - kubelet
       state: present
 
+  - name: Download Helm installation script
+    ansible.builtin.get_url:
+      url: https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
+      dest: /tmp/get_helm.sh
+      mode: '0755'
+    delegate_to: master-001
+
+  - name: Run Helm installation script
+    command: /tmp/get_helm.sh
+    args:
+      creates: /usr/local/bin/helm
+    register: helm_install_result
+    changed_when: false
+    delegate_to: master-001
+
+  - name: Add /usr/local/bin to PATH
+    lineinfile:
+      path: ~/.bashrc
+      line: 'export PATH=$PATH:/usr/local/bin'
+    when: helm_install_result.rc == 0
+    delegate_to: master-001
+
   - name: Install CRI-O
     ansible.builtin.dnf:
       name: "{{ packages }}"
@@ -218,58 +301,15 @@ def Ansible_Baseline():
         - socat
         - nfs-utils
         - dhcp-client
+        - pip
       state: present
 
-#---------------------------------> MAKE CONFIGURATIONS
-
-  - name: Add k8 nodes to /etc/hosts
-    lineinfile:
-      dest: /etc/hosts
-      line: "{{ item.line }}"
-    loop:
-      - { line: '192.168.1.200 master-001 master-001' }
-      - { line: '192.168.1.201 worker-001 worker-001' }
-      - { line: '192.168.1.202 worker-002 worker-002' }
-
-  - name: Disable swap
-    shell: |
-      swapoff -a
-   
-  - name: Disable swap from /etc/fstab
-    lineinfile:
-      path: /etc/fstab
-      regexp: 'swap'
-      state: absent
-
-  - name: Enable service firewalld
-    systemd:
-      name: firewalld
-      enabled: yes
-
-  - name: Open K8 and NFS - TCP
-    firewalld:
-      offline: yes
-      port: "{{ item }}/tcp"
-      permanent: yes
-      state: enabled
-    loop:
-      - 6443
-      - 2379
-      - 2380
-      - 10248
-      - 10250
-      - 10251
-      - 10255
-      - 2049
-
-  - name: Open K8 and NFS - UDP
-    firewalld:
-      offline: yes
-      port: "{{ item }}/udp"
-      permanent: yes
-      state: enabled
-    loop:
-      - 2049
+  - name: Install Base Packages for Ansible / K8 ability to deploy
+    pip:
+      name:
+        - openshift
+        - pyyaml
+    delegate_to: master-001
 
   - name: Enable mountd Service
     ansible.posix.firewalld:
@@ -278,6 +318,28 @@ def Ansible_Baseline():
       permanent: true
       immediate: true
       offline: true
+
+#---------------------------------> MAKE CONFIGURATIONS
+
+  - name: Add k8 nodes to /etc/hosts
+    ansible.builtin.lineinfile:
+      dest: /etc/hosts
+      line: "{{ item.line }}"
+    loop:
+      - { line: '192.168.1.200 master-001 master-001' }
+      - { line: '192.168.1.201 worker-001 worker-001' }
+      - { line: '192.168.1.202 worker-002 worker-002' }
+
+  - name: Disable swap
+    shell: swapoff -a
+
+  - name: Remove swap entry from fstab
+    mount:
+      path: none
+      src: /dev/mapper/ol-swap
+      fstype: swap
+      state: absent
+      backup: yes
 
   - name: Enable rpc-bind Service
     ansible.posix.firewalld:
@@ -317,21 +379,45 @@ def Ansible_Baseline():
       value: 1
       state: present
 
-  - name: Enable and Start kubelet service
+  - name: Enable and Start Kubelet Service
     ansible.builtin.service:
       name: kubelet
       state: started
       enabled: true
 
-  - name: Start and enable CRI-O service
-    systemd:
+  - name: Enable and Start CRI-O Service
+    ansible.builtin.systemd_service:
       name: crio
       state: started
       enabled: true
 
+  - name: Disable firewalld Service
+    ansible.builtin.systemd_service:
+      name: firewalld
+      state: stopped
+      enabled: no
+
   - name: Set hostname
     hostname:
       name: "{{ inventory_hostname }}"
+
+  - name: Create mount point
+    ansible.builtin.file:
+      path: /mnt/usb_drive
+      state: directory
+      mode: 0755
+
+  - name: Mount NFS share
+    ansible.posix.mount:
+        path: /mnt/usb_drive
+        src: 192.168.1.99:/mnt/usb_drive
+        fstype: nfs
+        state: mounted
+        opts: defaults,rw
+
+  - name: Pause for 1 minute for worker nodes to join successfully
+    ansible.builtin.pause:
+      minutes: 1
 
   - name: Add an Ethernet connection with static IP configuration
     community.general.nmcli:
@@ -339,6 +425,8 @@ def Ansible_Baseline():
       ifname: ens3
       type: ethernet
       ip4: "{{ new_ip }}"
+      dns4:
+          - 192.168.1.1
       gw4: 192.168.1.1
       state: present
 
@@ -365,10 +453,10 @@ def Ansible_Baseline():
     worker002.write("new_ip: 192.168.1.202/24")
     worker002.close()
 
-    print("Completed writing Ansible 'baseline' playbook")
+    print("Completed writing Ansible BASELINE playbook\n-----------------------------------------------------------------")
 
     def run_ansible_playbook(playbook_path, inventory_path):
-        print("Applying baseline configurations...")
+        print("Applying BASELINE Configuration playbook after authentication...")
         command = ["ansible-playbook", "--user", "root", "--ask-pass", playbook_path]
 
         if inventory_path:
@@ -394,15 +482,18 @@ def Ansible_Baseline():
             print("Standard Error:")
             print(error)
 
-#----------------------- START ANSIBLE-BASELINE -----------------------
+
+#----------------------- STOP ANSIBLE-BASELINE -----------------------
 
 #----------------------- START ANSIBLE-PREP -----------------------
 
 def Ansible_Prep():
-    print(f"Waiting 1 minute for VM's to obtain an IP Addresses")
+    print(f"\nWaiting 1 minute for VM's to obtain an IP Addresses...\n")
     time.sleep(60)
 
     # Execute the virsh command on each host and write to the inventory file
+    print("-----------------------------------------------------------------")
+    print("Creating inventory file")
     hosts = ["master-001", "worker-001", "worker-002"]
     ansible_inv = open(HOME_DIR + "inventory.ini", "w")
 
@@ -426,9 +517,10 @@ def Ansible_Prep():
         else:
             print(f"Command failed with error code {virsh_cmd.returncode}: {virsh_cmd.stderr}")
     ansible_inv.close()
-    print("Wrote IP Addresses to inventory file")
+    print("Completed writing inventory file\n-----------------------------------------------------------------")
 
     # Create ansible config file
+    print("Creating Ansible Configuration file")
     ansible_cfg = open(HOME_DIR + "ansible.cfg", "w")
     ansible_cfg.write('''[defaults]
 host_key_checking = False
@@ -436,25 +528,25 @@ deprecation_warnings = False
 interpreter_python = auto_silent
 ansible_connection_timeout = 5''')
     ansible_cfg.close()
-    print ("Wrote Ansible Configuration file")
-
+    print ("Completed writing Ansible Configuration file\n-----------------------------------------------------------------")
+    
 #---------------------- END ANSIBLE-PREP -----------------------
-
 
 #----------------------- START TERRAFORM -----------------------
 
 def Terraform():
-# Baseline VM created and disk located under mounted path 
+    print("Checking if BASELINE image exists...")
+    # Baseline VM created and disk located under mounted path 
     try:
         with open("/mnt/usb_drive/kvm/disk/ol9-kvm-baseline.qcow2", "r") as f:
-            print("Baseline qcow2 file exists... continuing")
+            print("Baseline qcow2 file exists... continuing\n-----------------------------------------------------------------")
             
     except FileNotFoundError:
         print("Basline qcow file NOT found... exiting")
         exit()
 
-# Create terraform main.tf, write the config and and close the stream
-    print("Creating main.tf")
+    # Create terraform main.tf, write the config and and close the stream
+    print("Creating Terraform main.tf")
     terraform_file = open(HOME_DIR + "main.tf", "w")
     terraform_file.write('''terraform {
   required_providers {
@@ -504,20 +596,25 @@ resource "libvirt_domain" "ol9-kvm-baseline" {
   }
 }''')
     terraform_file.close()
+    print("Completed writing Terraform main.tf\n-----------------------------------------------------------------")
+    print("Executing: terraform (init, plan, apply)")
 
-# Execute terraform "init" and "plan"
+    # Execute terraform "init" and "plan"
     subprocess.run(["terraform", "init"])
     subprocess.run(["terraform", "plan"])
 
-# Obtain input from operator if they want to proceed with "apply"
+    # Obtain input from operator if they want to proceed with "apply"
     name = input("Type YES or NO to apply the configuration: ")
     if name == "NO": 
-        print("No was typed... Exiting")
+        print("\nNo was typed... Exiting\n")
         exit()
-    else:
+    if name == "YES":
         print("Executing... (will update once completed)")
         subprocess.run(['terraform', 'apply', '-auto-approve'])
         print("Complete. VM's have been deployed\n")
+    else:
+        print("Incorrect value typed. Exiting...")
+        exit()
     return
 
 #----------------------- END TERRAFORM -----------------------
@@ -526,6 +623,7 @@ resource "libvirt_domain" "ol9-kvm-baseline" {
 
 def Cleanup():
 
+    print("-----------------------------------------------------------------")
     print("Cleaning up created files")
     p1 = pathlib.Path(HOME_DIR + "main.tf")
     p1.unlink(missing_ok=True)
@@ -536,8 +634,8 @@ def Cleanup():
     p1 = pathlib.Path(HOME_DIR + "baseline_playbook.yaml")
     p1.unlink(missing_ok=True)
 
-    p2 = pathlib.Path(HOME_DIR + "inventory.ini")
-    p2.unlink(missing_ok=True)
+    p1 = pathlib.Path(HOME_DIR + "inventory.ini")
+    p1.unlink(missing_ok=True)
 
     p1 = pathlib.Path(HOME_DIR + "terraform.tfstate")
     p1.unlink(missing_ok=True)
@@ -545,11 +643,20 @@ def Cleanup():
     p1 = pathlib.Path(HOME_DIR + "terraform.tfstate.backup")
     p1.unlink(missing_ok=True)
 
+    p1 = pathlib.Path(HOME_DIR + "nfs-csi.yaml")
+    p1.unlink(missing_ok=True)
+
     path = (HOME_DIR + "host_vars")
     shutil.rmtree(path, ignore_errors=True)
 
-    p2 = pathlib.Path(HOME_DIR + "k8_playbook.yaml")
-    p2.unlink(missing_ok=True)
+    p1 = pathlib.Path(HOME_DIR + "k8_playbook.yaml")
+    p1.unlink(missing_ok=True)
+
+    p1 = pathlib.Path(HOME_DIR + ".terraform.lock.hcl")
+    p1.unlink(missing_ok=True)
+
+    p1 = pathlib.Path(HOME_DIR + "join_playbook.yaml")
+    p1.unlink(missing_ok=True)
 
     print(f"Files have been cleaned up successfully\n")
 
