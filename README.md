@@ -49,22 +49,23 @@ This interactive script requires the following information prior to execution:
  - Token provides the following cloudflare permissions and resources:
 ------------
 Permissions:
--------------------------------------
-Account	|| Cloudflare Tunnel	|| Read
-Zone	|| DNS			|| Edit
--------------------------------------
+-----------------------------------------
+Account   || Cloudflare Tunnel	||Read
+-----------------------------------------
+Zone      || DNS         			||Edit
+-----------------------------------------
 
--------------------------------------
+-----------------------------------------
 Account Resources:
--------------------------------------
-Include	|| [emailAddress]
--------------------------------------
+-----------------------------------------
+Include   || [emailAddress]
+-----------------------------------------
 
--------------------------------------
+-----------------------------------------
 Zone Resource:
--------------------------------------
+-----------------------------------------
 Include	|| [your email address]
--------------------------------------
+-----------------------------------------
 
  - Once complete, select "Summary" and then obtain your token
 
