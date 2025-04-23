@@ -136,7 +136,7 @@ Under "Data", select "Index Management"
 ...
 kubectl get secret quickstart-es-elastic-user -n logging -o go-template='{{.data.elastic | base64decode}}'
 ...
-9) Kibana will be available via: https://kibana.<your-domain-name> - If there are issues, here are some helpful commands:
+9) Kibana will be available via: https://kibana.[your-domain-name] - If there are issues, here are some helpful commands:
  - Make sure Cert-Manager was deployed and online:
 kubectl get deployments -n cert-manager cert-manager
  - Cloudflare was registered with letsEncrypt using the ACME protocol (Automated Certificate Management Environment):
