@@ -147,3 +147,7 @@ kubectl get certificaterequests -n logging
 kubectl describe certificate -n logging kibana-letsencrypt
  - Check Cloudflare and make sure there is a TXT record in DNS:
 _acme-challenge.kibana
+
+TO DO:
+------
+ - Implement pipeline business case for Observability
