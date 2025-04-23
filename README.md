@@ -31,9 +31,7 @@ Executing "k8-create-py" script
 3) When prompted, enter the VM's root password for ansible baseline configuration to be applied
 4) When prompted, enter the VM's root password for ansible k8 configuration and master node init
 5) When prompted, enter the VM's root password for ansible worker node join
-6) Script will automatically cleanup files created and will take about 15 minutes to commplete
-
-NOTE: Not all exception handling has been implemented so here's hoping you have some familiarity with python and the function blocks created if errors are encountered
+6) Script will automatically cleanup files created and will take about 15 minutes to complete
 
 
 ==========================================
@@ -76,7 +74,7 @@ NOTE: If you have one but misplaced the API TOKEN, delete the old and create a n
 ---------------------------------------
 Executing "k8-kvm-cloudflare.py" script
 ---------------------------------------
-1) On the "Master Node", login to your cloudflare account
+1) On the "Master Node", login to your cloudflare account via web browser
 2) On the "Master Node", open a terminal and execute: ./k8-kvm-cloudflare.py
 3) Enter your Cloudflare User API Token:
 4) Enter your Cloudflare Email Address:
@@ -100,3 +98,64 @@ Executing "k8-kvm-cloudflare.py" script
  - Tunnels
 
 If the pod stayed up for longer than 70 seconds; your tunnel should be "HEALTHY"
+
+
+===================================
+AUTOMATED K8 on KVM (k8-kvm-efk.py)
+===================================
+
+This script installs:
+ - Elasticsearch 8.17.4 (single node)
+ - Elastic-Operator
+ - Fluentbit 3.2.10 (using YAML format)
+ - Fluent-Operator
+ - Kibana 8.17.4 (single node)
+ - Cert-Manager
+ - ClusterIssuer (letsEncrypt)
+ - Configures Ingress for DNS01 Challenge
+
+--------------
+Prerequisites:
+--------------
+1) K8-on-KVM infrastructure implemented
+2) Cloudflare Tunnel established
+3) Clouflare API Key/Token and Email Address
+
+--------------------------------
+Executing "k8-kvm-efk.py" script
+--------------------------------
+1) The script is to be executed on the master node. Upon execution, some packages wait between installs to ensure available dependencies
+
+2) The Elasticsearch / Fluentbit / Kibana installation is namespace scoped to "logging"
+
+3) Fluentbit tolerations has been configured to run on all nodes inclusing the control-plane
+
+4) Fluentbit is using Elasticsearch SSL credentials for the log collection pipeline
+
+5) Indicies will become available in Kibana by navigating:
+...
+Select "Menu --> Management --> Stack Management"
+...
+Under "Data", select "Index Management"
+
+6) Elasticsearch and Kibana have the same username by default of: "elastic" - To obtaion the password, execute:
+...
+kubectl get secret quickstart-es-elastic-user -n logging -o go-template='{{.data.elastic | base64decode}}'
+
+7) Kibana will be available via: https://kibana.<your-domain-name> - If there are issues, here are some helpful commands:
+
+ - Make sure Cert-Manager was deployed and online:
+kubectl get deployments -n cert-manager cert-manager
+
+ - Cloudflare was registered with letsEncrypt using the ACME protocol (Automated Certificate Management Environment):
+kubectl get clusterissuer -o wide
+
+ - Obtain Approved/Denied status of certificate request:
+kubectl get certificaterequests -n logging
+
+ - Get details and events of certificate:
+kubectl describe certificate -n logging kibana-letsencrypt
+
+ - Check Cloudflare and make sure there is a TXT record in DNS:
+_acme-challenge.kibana
+
