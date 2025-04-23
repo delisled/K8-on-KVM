@@ -1,6 +1,6 @@
 # k8-on-kvm
 
-==================================
+
 AUTOMATED K8 on KVM (k8-create.py)
 ==================================
 This automated process requires the following information prior to execution:
