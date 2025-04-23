@@ -123,37 +123,27 @@ Prerequisites:
 Executing "k8-kvm-efk.py" script
 --------------------------------
 1) The script is to be executed on the master node. Upon execution, some packages wait between installs to ensure available dependencies
-
 2) The Elasticsearch / Fluentbit / Kibana installation is namespace scoped to "logging"
-
 3) Fluentbit tolerations has been configured to run on all nodes inclusing the control-plane
-
 4) Fluentbit is using Elasticsearch SSL credentials for the log collection pipeline
-
 5) Indicies will become available in Kibana by navigating:
 ...
 Select "Menu --> Management --> Stack Management"
 ...
 Under "Data", select "Index Management"
-
-6) Elasticsearch and Kibana have the same username by default of: "elastic" - To obtaion the password, execute:
+...
+7) Elasticsearch and Kibana have the same username by default of: "elastic" - To obtaion the password, execute:
 ...
 kubectl get secret quickstart-es-elastic-user -n logging -o go-template='{{.data.elastic | base64decode}}'
-
-7) Kibana will be available via: https://kibana.<your-domain-name> - If there are issues, here are some helpful commands:
-
+...
+9) Kibana will be available via: https://kibana.<your-domain-name> - If there are issues, here are some helpful commands:
  - Make sure Cert-Manager was deployed and online:
 kubectl get deployments -n cert-manager cert-manager
-
  - Cloudflare was registered with letsEncrypt using the ACME protocol (Automated Certificate Management Environment):
 kubectl get clusterissuer -o wide
-
  - Obtain Approved/Denied status of certificate request:
 kubectl get certificaterequests -n logging
-
  - Get details and events of certificate:
 kubectl describe certificate -n logging kibana-letsencrypt
-
  - Check Cloudflare and make sure there is a TXT record in DNS:
 _acme-challenge.kibana
-
