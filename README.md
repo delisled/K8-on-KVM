@@ -1,8 +1,8 @@
 # k8-on-kvm
 
 
-= AUTOMATED K8 on KVM (k8-create.py) =
-======================================
+ = AUTOMATED K8 on KVM (k8-create.py) =
+=======================================
 This automated process requires the following information prior to execution:
 1) You have a type 2 KVM hypervisor setup on Oracle Linux 9
 2) A network bridge is configured on the host and LibVirt environment named: br0
@@ -34,9 +34,8 @@ Executing "k8-create-py" script
 6) Script will automatically cleanup files created and will take about 15 minutes to complete
 
 
-==========================================
-AUTOMATED K8 on KVM (k8-kvm-cloudflare.py)
-==========================================
+ = AUTOMATED K8 on KVM (k8-kvm-cloudflare.py) = 
+===============================================
 This interactive script requires the following information prior to execution:
 1) This script is executed on the kubernetes "master" node
 2) You have sudo rights on the "master" node
@@ -100,9 +99,8 @@ Executing "k8-kvm-cloudflare.py" script
 If the pod stayed up for longer than 70 seconds; your tunnel should be "HEALTHY"
 
 
-===================================
-AUTOMATED K8 on KVM (k8-kvm-efk.py)
-===================================
+ = AUTOMATED K8 on KVM (k8-kvm-efk.py) =
+========================================
 
 This script installs:
  - Elasticsearch 8.17.4 (single node)
